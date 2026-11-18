@@ -130,9 +130,81 @@ void FieldGetPlayerInput(struct FieldInput *input, u16 newKeys, u16 heldKeys)
     else if (heldKeys & DPAD_RIGHT)
         input->dpadDirection = DIR_EAST;
 }
+struct GhostMailbox
+{
+    u8 active;
+    u8 mapGroup;
+    u8 mapNum;
+    s16 x;
+    s16 y;
+};
+
+EWRAM_DATA struct GhostMailbox gGhostMailbox = {0};
+
+static void UpdateGhost(void)
+{
+    u8 id;
+    struct ObjectEvent *ghost;
+    s16 curX, curY, dx, dy;
+
+    id = GetObjectEventIdByLocalIdAndMap(GHOST_LOCAL_ID,
+             gSaveBlock1Ptr->location.mapNum,
+             gSaveBlock1Ptr->location.mapGroup);
+    if (id == OBJECT_EVENTS_COUNT)
+        return;
+    ghost = &gObjectEvents[id];
+
+    if (!gGhostMailbox.active
+     || gGhostMailbox.mapGroup != gSaveBlock1Ptr->location.mapGroup
+     || gGhostMailbox.mapNum != gSaveBlock1Ptr->location.mapNum)
+    {
+        ghost->invisible = TRUE;   // other player is on a different map
+        return;
+    }
+    ghost->invisible = FALSE;
+    ObjectEventClearHeldMovementIfFinished(ghost);
+    if (ObjectEventIsMovementOverridden(ghost))
+        return; // still in the middle of a step
+
+    curX = ghost->currentCoords.x - MAP_OFFSET;
+    curY = ghost->currentCoords.y - MAP_OFFSET;
+    dx = gGhostMailbox.x - curX;
+    dy = gGhostMailbox.y - curY;
+
+    if (dx == 0 && dy == 0)
+        return; // already there
+
+    if (dx > 2 || dx < -2 || dy > 2 || dy < -2)
+    {
+        // far away: jump straight there
+        TryMoveObjectEventToMapCoords(GHOST_LOCAL_ID,
+            gSaveBlock1Ptr->location.mapNum,
+            gSaveBlock1Ptr->location.mapGroup,
+            gGhostMailbox.x, gGhostMailbox.y);
+        return;
+    }
+
+    ObjectEventSetHeldMovement(ghost,
+        GetWalkNormalMovementAction(GetDirectionToFace(curX, curY, gGhostMailbox.x, gGhostMailbox.y)));
+}
+
+EWRAM_DATA struct GhostMailbox gGhostOutbox = {0};
+
+static void UpdateOutbox(void)
+{
+    s16 px, py;
+
+    PlayerGetDestCoords(&px, &py);
+    gGhostOutbox.active = TRUE;
+    gGhostOutbox.mapGroup = gSaveBlock1Ptr->location.mapGroup;
+    gGhostOutbox.mapNum = gSaveBlock1Ptr->location.mapNum;
+    gGhostOutbox.x = px - MAP_OFFSET;
+    gGhostOutbox.y = py - MAP_OFFSET;
+}
 
 int ProcessPlayerFieldInput(struct FieldInput *input)
 {
+    
     struct MapPosition position;
     u8 playerDirection;
     u16 metatileBehavior;
@@ -143,7 +215,8 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     playerDirection = GetPlayerFacingDirection();
     GetPlayerPosition(&position);
     metatileBehavior = MapGridGetMetatileBehaviorAt(position.x, position.y);
-
+    UpdateGhost();
+    UpdateOutbox();
     if (CheckForTrainersWantingBattle() == TRUE)
         return TRUE;
 
