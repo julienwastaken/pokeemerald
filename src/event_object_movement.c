@@ -4702,7 +4702,11 @@ static bool8 IsMetatileDirectionallyImpassable(struct ObjectEvent *objectEvent, 
 
     return FALSE;
 }
-
+// Returns TRUE if the object event is a ghost object, FALSE otherwise.
+bool8 IsGhostObject(const struct ObjectEvent *objectEvent)
+{
+    return objectEvent->localId == GHOST_LOCAL_ID;
+}
 static bool8 DoesObjectCollideWithObjectAt(struct ObjectEvent *objectEvent, s16 x, s16 y)
 {
     u8 i;
@@ -4711,7 +4715,7 @@ static bool8 DoesObjectCollideWithObjectAt(struct ObjectEvent *objectEvent, s16 
     for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
     {
         curObject = &gObjectEvents[i];
-        if (curObject->active && curObject != objectEvent)
+        if (curObject->active && curObject != objectEvent && !IsGhostObject(curObject))
         {
             if ((curObject->currentCoords.x == x && curObject->currentCoords.y == y) || (curObject->previousCoords.x == x && curObject->previousCoords.y == y))
             {

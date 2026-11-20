@@ -145,22 +145,39 @@ static void UpdateGhost(void)
 {
     u8 id;
     struct ObjectEvent *ghost;
-    s16 curX, curY, dx, dy;
+    s16 curX, curY, dx, dy, px, py;
 
     id = GetObjectEventIdByLocalIdAndMap(GHOST_LOCAL_ID,
              gSaveBlock1Ptr->location.mapNum,
              gSaveBlock1Ptr->location.mapGroup);
-    if (id == OBJECT_EVENTS_COUNT)
-        return;
-    ghost = &gObjectEvents[id];
 
     if (!gGhostMailbox.active
      || gGhostMailbox.mapGroup != gSaveBlock1Ptr->location.mapGroup
      || gGhostMailbox.mapNum != gSaveBlock1Ptr->location.mapNum)
     {
-        ghost->invisible = TRUE;   // other player is on a different map
+        if (id != OBJECT_EVENTS_COUNT)
+            gObjectEvents[id].invisible = TRUE;   // other player is elsewhere
         return;
     }
+
+    if (id == OBJECT_EVENTS_COUNT)
+    {
+        // no ghost yet: create one if the other player is near enough to be on screen
+        PlayerGetDestCoords(&px, &py);
+        px -= MAP_OFFSET;
+        py -= MAP_OFFSET;
+        dx = gGhostMailbox.x - px;
+        dy = gGhostMailbox.y - py;
+        if (dx > 9 || dx < -9 || dy > 7 || dy < -7)
+            return;
+        id = SpawnSpecialObjectEventParameterized(OBJ_EVENT_GFX_STEVEN, MOVEMENT_TYPE_NONE,
+                 GHOST_LOCAL_ID, gGhostMailbox.x + MAP_OFFSET, gGhostMailbox.y + MAP_OFFSET,
+                 PlayerGetElevation());
+        if (id == OBJECT_EVENTS_COUNT)
+            return;
+    }
+
+    ghost = &gObjectEvents[id];
     ghost->invisible = FALSE;
     ObjectEventClearHeldMovementIfFinished(ghost);
     if (ObjectEventIsMovementOverridden(ghost))
@@ -176,7 +193,6 @@ static void UpdateGhost(void)
 
     if (dx > 2 || dx < -2 || dy > 2 || dy < -2)
     {
-        // far away: jump straight there
         TryMoveObjectEventToMapCoords(GHOST_LOCAL_ID,
             gSaveBlock1Ptr->location.mapNum,
             gSaveBlock1Ptr->location.mapGroup,
@@ -372,7 +388,9 @@ static const u8 *GetInteractedObjectEventScript(struct MapPosition *position, u8
         if (objectEventId == OBJECT_EVENTS_COUNT || gObjectEvents[objectEventId].localId == LOCALID_PLAYER)
             return NULL;
     }
-
+    if (gObjectEvents[objectEventId].localId == GHOST_LOCAL_ID)
+        return NULL;
+    
     gSelectedObjectEvent = objectEventId;
     gSpecialVar_LastTalked = gObjectEvents[objectEventId].localId;
     gSpecialVar_Facing = direction;
